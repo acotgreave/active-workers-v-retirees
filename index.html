@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Active Workers vs. Retirees — U.S. Public Pensions, 2001–2024</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<style>
+  :root {
+    --bg: #fbf8f1;
+    --ink: #1f2d2e;
+    --muted: #5b6b6c;
+    --rule: #d9d2c1;
+    --accent-left: #2d8a7e;   /* teal (workers side) */
+    --accent-right: #e68938;  /* orange (retirees side) */
+    --warn: #b94a2a;
+  }
+  html, body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 740px;
+    margin: 0 auto;
+    padding: 40px 20px 60px;
+  }
+  .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    margin-bottom: 10px;
+  }
+  h1 {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 30px;
+    line-height: 1.15;
+    margin: 0 0 12px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  h1 .workers { color: var(--accent-left); }
+  h1 .retirees { color: var(--accent-right); }
+  .dek {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--muted);
+    margin: 0 0 24px;
+    max-width: 620px;
+  }
+  .chart-container {
+    position: relative;
+  }
+  .narrative {
+    position: absolute;
+    top: 9%;        /* ~50px on a 560px-tall SVG */
+    left: 14.5%;    /* sits just inside the left axis spine (x=90 of 740) */
+    right: 40%;     /* never crosses into the right-axis label zone */
+    max-width: 250px;
+    z-index: 2;
+    pointer-events: none; /* let SVG receive events except on button */
+    opacity: 0;
+    transition: opacity 0.35s ease;
+  }
+  .narrative.visible { opacity: 1; }
+  .narrative-text {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 17px;
+    line-height: 1.4;
+    color: var(--ink);
+    margin: 0 0 14px;
+  }
+  .narrative-text strong { font-weight: 700; }
+  .narrative-next {
+    pointer-events: auto;
+    font: inherit;
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    padding: 7px 14px;
+    border: 1px solid var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .narrative-next:hover { background: var(--accent-left); border-color: var(--accent-left); }
+
+  svg { display: block; width: 100%; height: auto; font-family: inherit; }
+  .axis-title {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+  }
+  .axis-title.left  { fill: var(--accent-left); }
+  .axis-title.right { fill: var(--accent-right); }
+  .tick-text { font-size: 11px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+  .spine { stroke: var(--ink); stroke-width: 1.5; }
+  .year-line { fill: none; stroke-width: 1.5; opacity: 0.85; transition: stroke-width 0.25s, opacity 0.25s; }
+  .year-line.highlight { stroke-width: 3; opacity: 1; }
+  .endpoint { stroke: #fff; stroke-width: 1; }
+  .year-label {
+    font-size: 10px; fill: var(--muted); font-variant-numeric: tabular-nums;
+    pointer-events: none;
+    transition: font-weight 0.2s;
+  }
+  .year-label.highlight { font-weight: 700; font-size: 11px; }
+  .ref-line { stroke: var(--warn); stroke-width: 1; stroke-dasharray: 4 3; }
+  .ref-label {
+    font-size: 11px; fill: var(--warn); font-weight: 600;
+  }
+  .ref-sub {
+    font-size: 10px; fill: var(--warn); opacity: 0.85;
+  }
+  .annotation {
+    font-size: 11px; fill: var(--muted); font-style: italic;
+  }
+  footer {
+    margin-top: 24px; font-size: 11.5px; color: var(--muted); line-height: 1.5;
+    border-top: 1px solid var(--rule); padding-top: 14px;
+  }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="eyebrow">U.S. Public Pensions · 2001–2024</div>
+    <h1>The ratio of <span class="workers">active workers</span> to <span class="retirees">retirees</span> has flipped.</h1>
+    <p class="dek">
+      For two decades, America's public-pension plans had more workers paying in than retirees drawing out.
+      In 2012, the balance tipped. Each line below is one year: the left end is millions of active workers,
+      the right end is millions of retirees. Earlier years lean teal; recent years lean orange.
+    </p>
+
+    <div class="chart-container">
+      <div class="narrative" id="narrative">
+        <p class="narrative-text" id="narrative-text"></p>
+        <button class="narrative-next" id="narrative-next" type="button">Next →</button>
+      </div>
+      <div id="chart"></div>
+    </div>
+
+    <footer>
+      <strong>Source:</strong> Equable Institute analysis of public-plan valuation reports and ACFRs,
+      via <a href="https://www.visualcapitalist.com/" target="_blank" rel="noopener">Visual Capitalist</a>.
+      Values are in millions and are estimates. Chart by
+      <a href="https://github.com/acotgreave" target="_blank" rel="noopener">@acotgreave</a>.
+    </footer>
+  </div>
+
+<script>
+// ---------- data ----------
+const data = [
+  { year: 2001, workers: 12.7, retirees:  7.6 },
+  { year: 2002, workers: 12.9, retirees:  8.0 },
+  { year: 2003, workers: 13.0, retirees:  8.7 },
+  { year: 2004, workers: 12.9, retirees:  9.3 },
+  { year: 2005, workers: 13.2, retirees:  9.9 },
+  { year: 2006, workers: 13.2, retirees: 10.6 },
+  { year: 2007, workers: 13.5, retirees: 10.9 },
+  { year: 2008, workers: 13.7, retirees: 11.3 },
+  { year: 2009, workers: 13.7, retirees: 11.8 },
+  { year: 2010, workers: 13.7, retirees: 12.3 },
+  { year: 2011, workers: 13.4, retirees: 12.7 },
+  { year: 2012, workers: 13.2, retirees: 13.3 },
+  { year: 2013, workers: 13.0, retirees: 13.9 },
+  { year: 2014, workers: 13.1, retirees: 14.3 },
+  { year: 2015, workers: 13.3, retirees: 14.7 },
+  { year: 2016, workers: 13.3, retirees: 15.3 },
+  { year: 2017, workers: 13.6, retirees: 15.5 },
+  { year: 2018, workers: 13.5, retirees: 16.3 },
+  { year: 2019, workers: 13.2, retirees: 16.6 },
+  { year: 2020, workers: 13.5, retirees: 16.6 },
+  { year: 2021, workers: 13.1, retirees: 17.6 },
+  { year: 2022, workers: 13.4, retirees: 18.8 },
+  { year: 2023, workers: 13.7, retirees: 19.5 },
+  { year: 2024, workers: 14.5, retirees: 18.8 },
+];
+
+// ---------- layout ----------
+const width  = 740;
+const height = 560;
+const margin = { top: 40, right: 90, bottom: 40, left: 90 };
+const innerW = width  - margin.left - margin.right;
+const innerH = height - margin.top  - margin.bottom;
+
+// X positions for the two categories
+const xWorkers = 0;
+const xRetirees = innerW;
+
+// Y scale — shared, covers both sides
+const allValues = data.flatMap(d => [d.workers, d.retirees]);
+const y = d3.scaleLinear()
+  .domain([6, 20.5])
+  .range([innerH, 0]);
+
+// Color ramp — teal → warm cream → orange to echo the original palette
+const colorRamp = d3.scaleSequential()
+  .domain([2001, 2024])
+  .interpolator(d3.interpolateRgbBasis(["#2d8a7e", "#b9a678", "#e68938"]));
+
+// ---------- svg ----------
+const svg = d3.select("#chart").append("svg")
+  .attr("viewBox", `0 0 ${width} ${height}`)
+  .attr("role", "img")
+  .attr("aria-label", "Slope chart: active workers vs retirees in U.S. public pensions, 2001 to 2024");
+
+const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+// ---------- reference line: crossover at 2012 ----------
+// In 2012 workers=13.2M, retirees=13.3M. A horizontal line at the equilibrium value
+// (~13.25M) marks the threshold where every year's line pivots: lines sloping upward
+// above this level indicate retirees outnumbering workers.
+const crossoverY = 13.25;
+const refG = g.append("g").attr("class", "reference");
+
+refG.append("line")
+  .attr("class", "ref-line")
+  .attr("x1", -8).attr("x2", innerW + 8)
+  .attr("y1", y(crossoverY)).attr("y2", y(crossoverY));
+
+refG.append("text")
+  .attr("class", "ref-label")
+  .attr("x", innerW + 8)
+  .attr("y", y(crossoverY) - 6)
+  .attr("text-anchor", "end")
+  .text("2012 — retirees overtake workers");
+
+// ---------- spines ----------
+g.append("line").attr("class", "spine")
+  .attr("x1", xWorkers).attr("x2", xWorkers)
+  .attr("y1", 0).attr("y2", innerH);
+
+g.append("line").attr("class", "spine")
+  .attr("x1", xRetirees).attr("x2", xRetirees)
+  .attr("y1", 0).attr("y2", innerH);
+
+// Y ticks on each side
+const ticks = [8, 10, 12, 14, 16, 18, 20];
+ticks.forEach(t => {
+  g.append("text").attr("class", "tick-text")
+    .attr("x", xWorkers - 10).attr("y", y(t)).attr("dy", "0.35em")
+    .attr("text-anchor", "end")
+    .text(`${t}M`);
+  g.append("text").attr("class", "tick-text")
+    .attr("x", xRetirees + 10).attr("y", y(t)).attr("dy", "0.35em")
+    .attr("text-anchor", "start")
+    .text(`${t}M`);
+});
+
+// Axis titles
+g.append("text").attr("class", "axis-title left")
+  .attr("x", xWorkers).attr("y", -18)
+  .attr("text-anchor", "middle")
+  .text("Active Workers");
+
+g.append("text").attr("class", "axis-title right")
+  .attr("x", xRetirees).attr("y", -18)
+  .attr("text-anchor", "middle")
+  .text("Retirees");
+
+g.append("text").attr("class", "tick-text")
+  .attr("x", xWorkers).attr("y", innerH + 26)
+  .attr("text-anchor", "middle")
+  .text("millions");
+
+g.append("text").attr("class", "tick-text")
+  .attr("x", xRetirees).attr("y", innerH + 26)
+  .attr("text-anchor", "middle")
+  .text("millions");
+
+// ---------- year lines ----------
+const linesG = g.append("g").attr("class", "lines");
+const endpointsG = g.append("g").attr("class", "endpoints");
+const labelsG = g.append("g").attr("class", "labels");
+
+// pre-create one group per year for easy show/hide
+const yearGroups = data.map(d => {
+  const color = colorRamp(d.year);
+  const group = linesG.append("g").attr("class", "year-group").style("display", "none");
+
+  const line = group.append("line")
+    .attr("class", "year-line")
+    .attr("x1", xWorkers).attr("y1", y(d.workers))
+    .attr("x2", xRetirees).attr("y2", y(d.retirees))
+    .attr("stroke", color);
+
+  const leftDot = group.append("circle")
+    .attr("class", "endpoint")
+    .attr("cx", xWorkers).attr("cy", y(d.workers))
+    .attr("r", 3).attr("fill", color);
+
+  const rightDot = group.append("circle")
+    .attr("class", "endpoint")
+    .attr("cx", xRetirees).attr("cy", y(d.retirees))
+    .attr("r", 3).attr("fill", color);
+
+  // every year gets a label so the "current year" highlight always has something to bold
+  const label = labelsG.append("text")
+    .attr("class", "year-label")
+    .attr("x", xRetirees + 34)
+    .attr("y", y(d.retirees))
+    .attr("dy", "0.35em")
+    .attr("fill", color)
+    .style("display", "none")
+    .text(d.year);
+
+  return { d, group, line, leftDot, rightDot, label, color };
+});
+
+// Nudge labels apart so they don't overlap when multiple years share a retiree value
+// (2019 & 2020 = 16.6M; 2022 & 2024 = 18.8M). Sort by y and enforce a minimum gap.
+const MIN_LABEL_GAP = 12;
+const labelEntries = yearGroups
+  .map(g => ({ yg: g, y: y(g.d.retirees) }))
+  .sort((a, b) => a.y - b.y);
+for (let i = 1; i < labelEntries.length; i++) {
+  if (labelEntries[i].y - labelEntries[i - 1].y < MIN_LABEL_GAP) {
+    labelEntries[i].y = labelEntries[i - 1].y + MIN_LABEL_GAP;
+    labelEntries[i].yg.label.attr("y", labelEntries[i].y);
+  }
+}
+
+// ---------- narrative state machine ----------
+// Three scripted steps. Each step plays a year-range reveal, then pauses with
+// an annotation in the top-left whitespace until the user clicks Next.
+const steps = [
+  {
+    playRange: [2001, 2001],  // reveal just 2001
+    narrative: `In <strong>2001</strong>, active workers led retirees by <strong>5.1 million</strong>. America's public pensions had far more people paying in than drawing out.`,
+    nextLabel: "Play to 2012 →",
+    action: "next"
+  },
+  {
+    playRange: [2002, 2012],
+    narrative: `In <strong>2012</strong>, retirees overtook active workers for the first time. The balance that had defined public pensions for decades tipped.`,
+    nextLabel: "Play to 2024 →",
+    action: "next"
+  },
+  {
+    playRange: [2013, 2024],
+    narrative: `By <strong>2024</strong>, retirees outnumbered workers by <strong>4.3 million</strong>. Pension payouts now exceed contributions — and the trend shows no sign of reversing.`,
+    nextLabel: "↻ Replay",
+    action: "replay"
+  }
+];
+
+const narrativeEl  = document.getElementById("narrative");
+const narrativeTxt = document.getElementById("narrative-text");
+const narrativeNext = document.getElementById("narrative-next");
+
+let currentStep = 0;
+let timer = null;
+let lastHighlighted = null; // entry currently holding the highlight
+
+function stopTimer() {
+  if (timer) { clearInterval(timer); timer = null; }
+}
+
+function hideAllYears() {
+  yearGroups.forEach(({ group, line, label }) => {
+    group.style("display", "none");
+    line.classed("highlight", false);
+    if (label) {
+      label.style("display", "none");
+      label.classed("highlight", false);
+    }
+  });
+  lastHighlighted = null;
+}
+
+function highlightEntry(entry) {
+  // un-highlight the previous year so only the current one is emphasized
+  if (lastHighlighted && lastHighlighted !== entry) {
+    lastHighlighted.line.classed("highlight", false);
+    if (lastHighlighted.label) lastHighlighted.label.classed("highlight", false);
+  }
+  entry.line.classed("highlight", true);
+  if (entry.label) entry.label.classed("highlight", true);
+  lastHighlighted = entry;
+}
+
+function revealYear(year, withTransition = true) {
+  const entry = yearGroups.find(g => g.d.year === year);
+  if (!entry) return;
+  entry.group.style("display", null);
+  if (entry.label) entry.label.style("display", null);
+  if (withTransition) {
+    entry.group.style("opacity", 0).transition().duration(350).style("opacity", 1);
+    if (entry.label) entry.label.style("opacity", 0).transition().duration(350).style("opacity", 1);
+  } else {
+    entry.group.style("opacity", 1);
+    if (entry.label) entry.label.style("opacity", 1);
+  }
+  // highlight this year (and un-highlight the previous)
+  highlightEntry(entry);
+}
+
+function showNarrative(step) {
+  narrativeTxt.innerHTML = step.narrative;
+  narrativeNext.textContent = step.nextLabel;
+  narrativeNext.dataset.action = step.action;  // "next" or "replay"
+  narrativeNext.style.display = "";
+  narrativeEl.classList.add("visible");
+}
+
+function hideNarrative() {
+  narrativeEl.classList.remove("visible");
+}
+
+function playStep(stepIndex) {
+  stopTimer();
+  hideNarrative();
+  const step = steps[stepIndex];
+  const [from, to] = step.playRange;
+  const yearsToShow = [];
+  for (let y = from; y <= to; y++) yearsToShow.push(y);
+
+  let i = 0;
+  const tick = () => {
+    if (i >= yearsToShow.length) {
+      stopTimer();
+      // small beat before narrative appears
+      setTimeout(() => showNarrative(step), 350);
+      return;
+    }
+    const year = yearsToShow[i];
+    revealYear(year, true);
+    i++;
+  };
+  // if the range is a single year, reveal it immediately and show annotation
+  if (yearsToShow.length === 1) {
+    revealYear(yearsToShow[0], true);
+    setTimeout(() => showNarrative(step), 450);
+    return;
+  }
+  tick(); // immediate first tick
+  timer = setInterval(tick, 320);
+}
+
+function resetAndStart() {
+  stopTimer();
+  hideAllYears();
+  hideNarrative();
+  currentStep = 0;
+  // tiny delay so the fade-out of old narrative reads before the new one appears
+  setTimeout(() => playStep(currentStep), 200);
+}
+
+narrativeNext.addEventListener("click", () => {
+  const action = narrativeNext.dataset.action;
+  if (action === "replay") {
+    resetAndStart();
+    return;
+  }
+  // default: advance to next step
+  if (currentStep >= steps.length - 1) return;
+  currentStep += 1;
+  playStep(currentStep);
+});
+
+// initial state: start the scripted sequence
+resetAndStart();
+</script>
+</body>
+</html>
