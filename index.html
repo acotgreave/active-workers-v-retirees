@@ -44,8 +44,8 @@
     font-weight: 700;
     letter-spacing: -0.01em;
   }
-  h1 .workers { color: var(--accent-left); }
-  h1 .retirees { color: var(--accent-right); }
+  .workers { color: var(--accent-left); }
+  .retirees { color: var(--accent-right); }
   .dek {
     font-size: 15px;
     line-height: 1.55;
@@ -334,19 +334,19 @@ for (let i = 1; i < labelEntries.length; i++) {
 const steps = [
   {
     playRange: [2001, 2001],  // reveal just 2001
-    narrative: `In <strong>2001</strong>, active workers led retirees by <strong>5.1 million</strong>. America's public pensions had far more people paying in than drawing out.`,
+    narrative: `In <strong>2001</strong>, <span class="workers">active workers</span> led <span class="retirees">retirees</span> by <strong>5.1 million</strong>. America's public pensions had far more people paying in than drawing out.`,
     nextLabel: "Play to 2012 →",
     action: "next"
   },
   {
     playRange: [2002, 2012],
-    narrative: `In <strong>2012</strong>, retirees overtook active workers for the first time. The balance that had defined public pensions for decades tipped.`,
+    narrative: `In <strong>2012</strong>, <span class="retirees">retirees</span> overtook <span class="workers">active workers</span> for the first time. The balance that had defined public pensions for decades tipped.`,
     nextLabel: "Play to 2024 →",
     action: "next"
   },
   {
     playRange: [2013, 2024],
-    narrative: `By <strong>2024</strong>, retirees outnumbered workers by <strong>4.3 million</strong>. Pension payouts now exceed contributions — and the trend shows no sign of reversing.`,
+    narrative: `By <strong>2024</strong>, <span class="retirees">retirees</span> outnumbered <span class="workers">workers</span> by <strong>4.3 million</strong>. Pension payouts now exceed contributions — and the trend shows no sign of reversing.`,
     nextLabel: "↻ Replay",
     action: "replay"
   }
